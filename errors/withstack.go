@@ -14,7 +14,7 @@ import (
 func WithStack(err error) error {
 	// Skip the frame of WithStack itself, this mirrors the behavior
 	// of WithStack() in github.com/pkg/errors.
-	return WithStackDepth(err, 2)
+	return WithStackDepth(err, 1)
 }
 
 // WithStackDepth annotates err with a wrapper trace starting from the
@@ -25,15 +25,11 @@ func WithStackDepth(err error, depth int) error {
 	if err == nil {
 		return nil
 	}
-	// do not add redundant PCs if previously wrapped
-	redundantPCs := getRedundantPCs(err)
-	if len(redundantPCs) > 0 {
-		hasSkippedFrames, st := CallersWithSkipFrames(depth+1, redundantPCs)
-		// fmt.Println("ElidedRedundantPCs", hasSkippedFrames)
-		return &withStack{cause: err, hasSkippedFrames: hasSkippedFrames, Stack: st}
-	}
-
-	return &withStack{cause: err, Stack: Callers(depth + 1)}
+	st := Callers(depth + 2)
+	prevStack := getLastStack(err)
+	var hasSkippedFrames bool
+	st, hasSkippedFrames = ElideSharedStackSuffix(prevStack, st)
+	return &withStack{cause: err, hasSkippedFrames: hasSkippedFrames, Stack: st}
 }
 
 type withStack struct {
@@ -60,7 +56,6 @@ func (w *withStack) Format(st fmt.State, _ rune) {
 		_, _ = io.WriteString(st, strings.ReplaceAll(
 			fmt.Sprintf("%+v", stackTraceString),
 			"\n", string(detailSep)))
-		// fmt.Fprintf(st, "\n%+v", w.StackTrace().String())
 	}
 }
 
@@ -97,35 +92,25 @@ func (w *withStack) formatEntries(st fmt.State) {
 	}
 }
 
-func getRedundantPCs(err error) map[uintptr]struct{} {
-	redundancies := make(map[uintptr]struct{})
-
-	entries := getEntries(err)
-	for i := range entries {
-		if ws, ok := entries[i].(*withStack); ok {
-			// fmt.Println("Found a wrapper error!")
-			// if it has a wrapper
-			for _, pc := range ([]uintptr)(*ws.Stack) {
-				// fmt.Println("skippable i:", j, " pc:", pc)
-				redundancies[pc] = struct{}{}
-			}
-		} else {
-			// fmt.Println("Not a wrapper error!", entries[i])
+func getLastStack(err error) *Stack {
+	for err != nil {
+		if ws, ok := err.(*withStack); ok {
+			return ws.Stack
 		}
+		err = UnwrapOnce(err)
 	}
-	return redundancies
+
+	return nil
 }
 
 func getEntries(err error) []error {
 	var entries []error
 	for err != nil {
-		// fmt.Println("Appending", err)
-		entries = append(entries, err)
-		// fmt.Println("Appended", entries)
+		// prepend because we want the stack last in, first out
+		entries = append([]error{err}, entries...)
 		err = UnwrapOnce(err)
 	}
 
-	// fmt.Println("Entries is nil!")
 	return entries
 }
 

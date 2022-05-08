@@ -15,27 +15,6 @@ func Callers(skip int) *Stack {
 	return &st
 }
 
-// CallersWithSkipFrames mirrors the code in github.com/pkg/errors,
-// but makes the skip depth customizable, and skips any
-// redundant program counter frames
-func CallersWithSkipFrames(skip int, skipFrames map[uintptr]struct{}) (bool, *Stack) {
-	hasSkippedFrames := false
-	pcs := captureStacktrace(skip)
-	var newPCs []uintptr
-	for i := 0; i < len(pcs); i++ {
-		_, ok := skipFrames[pcs[i]]
-		if ok {
-			hasSkippedFrames = true
-		} else {
-			newPCs = append(newPCs, pcs[i])
-		}
-		// fmt.Println("i:", i, " ok:", ok, " pc:", pcs[i], " skipframes:", hasSkippedFrames)
-
-	}
-	var st Stack = newPCs
-	return hasSkippedFrames, &st
-}
-
 func captureStacktrace(skip int) []uintptr {
 	// Unlike other "skip"-based APIs, skip=0 identifies runtime.Callers
 	// itself. +2 to skip captureStacktrace and runtime.Callers.
@@ -43,7 +22,7 @@ func captureStacktrace(skip int) []uintptr {
 	var numFrames = 64
 	pcs := make([]uintptr, numFrames)
 	numFrames = runtime.Callers(skip+selfSkip, pcs)
-	// runtime.Callers truncates the recorded stacktrace if there is no
+	// runtime.Callers will truncate the recorded stacktrace if there is no
 	// room in the provided slice. For the full wrapper trace, keep expanding
 	// storage until there are fewer frames than there is room.
 	for numFrames == len(pcs) {
@@ -55,7 +34,6 @@ func captureStacktrace(skip int) []uintptr {
 	var newPCs []uintptr
 	for i := range pcs[0:numFrames] {
 		newPCs = append(newPCs, pcs[i])
-		// fmt.Println("callers i:", i, " u:", pcs[i])
 	}
 	return newPCs
 }
@@ -140,19 +118,24 @@ func (sf *stackTraceFormatter) FormatFrame(frame runtime.Frame) {
 // were elided.
 // type StackTrace []Frame -> type StackTrace runtime.Frames
 // callers []uintptr
-func ElideSharedStackSuffix(prevStack, newStack Stack) (Stack, bool) {
-
-	if len(prevStack) == 0 {
+func ElideSharedStackSuffix(prevStack, newStack *Stack) (*Stack, bool) {
+	if newStack == nil || prevStack == nil {
 		return newStack, false
 	}
-	if len(newStack) == 0 {
+	newSt := *newStack
+	prevSt := *prevStack
+
+	if len(prevSt) == 0 {
+		return newStack, false
+	}
+	if len(newSt) == 0 {
 		return newStack, false
 	}
 
 	// Skip over the common suffix.
 	var i, j int
-	for i, j = len(newStack)-1, len(prevStack)-1; i > 0 && j > 0; i, j = i-1, j-1 {
-		if newStack[i] != prevStack[j] {
+	for i, j = len(newSt)-1, len(prevSt)-1; i > 0 && j > 0; i, j = i-1, j-1 {
+		if (newSt)[i] != (prevSt)[j] {
 			break
 		}
 	}
@@ -160,6 +143,6 @@ func ElideSharedStackSuffix(prevStack, newStack Stack) (Stack, bool) {
 		// Keep at least one entry.
 		i = 1
 	}
-
-	return newStack[:i], i < len(newStack)-1
+	elidedStack := newSt[:i]
+	return &(elidedStack), i < len((newSt))-1
 }

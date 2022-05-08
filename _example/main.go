@@ -31,6 +31,6 @@ func main() {
 	myErr := bar()
 	fmt.Println("Doing something")
 	err := errors.WithStack(myErr)
-	fmt.Println("\n\n\n----")
+	fmt.Println("----")
 	fmt.Printf("%+v\n", err)
 }
