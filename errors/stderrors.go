@@ -10,8 +10,19 @@ package errors
 
 import (
 	"fmt"
-	"reflect"
+	// reflectlite is a package internal to the stdlib, but its API is the same
+	// as reflect. This rename keeps the code below identical to that in the
+	// internals of the errors package.
+	reflectlite "reflect"
+
+	stderrs "errors"
 )
+
+// New returns an error that formats as the given text.
+// Each call to New returns a distinct error value even if the text is identical.
+func New(text string) error {
+	return stderrs.New(text)
+}
 
 // Cause aliases UnwrapAll() for compatibility with github.com/pkg/errors.
 func Cause(err error) error { return UnwrapAll(err) }
@@ -53,19 +64,19 @@ func As(err error, target interface{}) bool {
 
 	// We use introspection for now, of course when/if Go gets generics
 	// all this can go away.
-	val := reflect.ValueOf(target)
+	val := reflectlite.ValueOf(target)
 	typ := val.Type()
-	if typ.Kind() != reflect.Ptr || val.IsNil() {
+	if typ.Kind() != reflectlite.Ptr || val.IsNil() {
 		panic(fmt.Errorf("errors.As: target must be a non-nil pointer, found %T", target))
 	}
-	if e := typ.Elem(); e.Kind() != reflect.Interface && !e.Implements(errorType) {
+	if e := typ.Elem(); e.Kind() != reflectlite.Interface && !e.Implements(errorType) {
 		panic(fmt.Errorf("errors.As: *target must be interface or implement error, found %T", target))
 	}
 
 	targetType := typ.Elem()
 	for c := err; c != nil; c = UnwrapOnce(c) {
-		if reflect.TypeOf(c).AssignableTo(targetType) {
-			val.Elem().Set(reflect.ValueOf(c))
+		if reflectlite.TypeOf(c).AssignableTo(targetType) {
+			val.Elem().Set(reflectlite.ValueOf(c))
 
 			return true
 		}
@@ -77,7 +88,7 @@ func As(err error, target interface{}) bool {
 	return false
 }
 
-var errorType = reflect.TypeOf((*error)(nil)).Elem()
+var errorType = reflectlite.TypeOf((*error)(nil)).Elem()
 
 // Is determines whether one of the causes of the given error or any
 // of its causes is equivalent to some reference error.

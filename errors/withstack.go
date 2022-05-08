@@ -9,15 +9,15 @@ import (
 // This file mirrors the WithStack functionality from
 // github.com/pkg/errors.
 
-// WithStack annotates err with a stack trace at the point WithStack was
+// WithStack annotates err with a wrapper trace at the point WithStack was
 // called.
 func WithStack(err error) error {
 	// Skip the frame of WithStack itself, this mirrors the behavior
 	// of WithStack() in github.com/pkg/errors.
-	return WithStackDepth(err, 1)
+	return WithStackDepth(err, 2)
 }
 
-// WithStackDepth annotates err with a stack trace starting from the
+// WithStackDepth annotates err with a wrapper trace starting from the
 // given call depth. The value zero identifies the caller
 // of WithStackDepth itself.
 // See the documentation of WithStack() for more details.
@@ -25,9 +25,12 @@ func WithStackDepth(err error, depth int) error {
 	if err == nil {
 		return nil
 	}
-	// do not re-wrap
-	if _, ok := err.(*withStack); ok {
-		return err
+	// do not add redundant PCs if previously wrapped
+	redundantPCs := getRedundantPCs(err)
+	if len(redundantPCs) > 0 {
+		hasSkippedFrames, st := CallersWithSkipFrames(depth+1, redundantPCs)
+		// fmt.Println("ElidedRedundantPCs", hasSkippedFrames)
+		return &withStack{cause: err, hasSkippedFrames: hasSkippedFrames, Stack: st}
 	}
 
 	return &withStack{cause: err, Stack: Callers(depth + 1)}
@@ -36,6 +39,7 @@ func WithStackDepth(err error, depth int) error {
 type withStack struct {
 	cause error
 	*Stack
+	hasSkippedFrames bool
 }
 
 var (
@@ -50,12 +54,14 @@ func (w *withStack) Unwrap() error { return w.cause }
 // Format implements the fmt.Formatter interface.
 func (w *withStack) Format(st fmt.State, _ rune) {
 	w.formatEntries(st)
-
-	_, _ = io.WriteString(st, "\n  -- Stack trace:")
-	_, _ = io.WriteString(st, strings.ReplaceAll(
-		fmt.Sprintf("%+v", w.StackTrace().String()),
-		"\n", string(detailSep)))
-	// fmt.Fprintf(st, "\n%+v", w.StackTrace().String())
+	stackTraceString := w.StackTrace().String()
+	if stackTraceString != "" {
+		_, _ = io.WriteString(st, "\n  -- Stack trace:")
+		_, _ = io.WriteString(st, strings.ReplaceAll(
+			fmt.Sprintf("%+v", stackTraceString),
+			"\n", string(detailSep)))
+		// fmt.Fprintf(st, "\n%+v", w.StackTrace().String())
+	}
 }
 
 // formatEntries reads the entries from s.entries and produces a
@@ -91,12 +97,35 @@ func (w *withStack) formatEntries(st fmt.State) {
 	}
 }
 
+func getRedundantPCs(err error) map[uintptr]struct{} {
+	redundancies := make(map[uintptr]struct{})
+
+	entries := getEntries(err)
+	for i := range entries {
+		if ws, ok := entries[i].(*withStack); ok {
+			// fmt.Println("Found a wrapper error!")
+			// if it has a wrapper
+			for _, pc := range ([]uintptr)(*ws.Stack) {
+				// fmt.Println("skippable i:", j, " pc:", pc)
+				redundancies[pc] = struct{}{}
+			}
+		} else {
+			// fmt.Println("Not a wrapper error!", entries[i])
+		}
+	}
+	return redundancies
+}
+
 func getEntries(err error) []error {
 	var entries []error
 	for err != nil {
+		// fmt.Println("Appending", err)
 		entries = append(entries, err)
+		// fmt.Println("Appended", entries)
 		err = UnwrapOnce(err)
 	}
+
+	// fmt.Println("Entries is nil!")
 	return entries
 }
 
@@ -111,9 +140,15 @@ func printEntry(st fmt.State, entry error) {
 		}
 	}
 	if w, ok := entry.(*withStack); ok {
-		_, _ = io.WriteString(st, "\n  -- Stack trace:")
-		_, _ = io.WriteString(st, strings.ReplaceAll(
-			fmt.Sprintf("%+v", w.StackTrace().String()),
-			"\n", string(detailSep)))
+		stackTraceString := w.StackTrace().String()
+		if w.hasSkippedFrames || strings.TrimSpace(stackTraceString) != "" {
+			_, _ = io.WriteString(st, "\n  -- Stack trace:")
+			_, _ = io.WriteString(st, strings.ReplaceAll(
+				fmt.Sprintf("%+v", stackTraceString),
+				"\n", string(detailSep)))
+		}
+		if w.hasSkippedFrames {
+			fmt.Fprintf(st, "%s[...repeated from below...]", detailSep)
+		}
 	}
 }

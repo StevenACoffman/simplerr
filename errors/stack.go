@@ -10,12 +10,54 @@ import (
 // Callers mirrors the code in github.com/pkg/errors,
 // but makes the skip depth customizable.
 func Callers(skip int) *Stack {
-	const numFrames = 64
-	var pcs [numFrames]uintptr
-	n := runtime.Callers(2+skip, pcs[:])
-	var st Stack = pcs[0:n]
+	var st Stack = captureStacktrace(skip)
 
 	return &st
+}
+
+// CallersWithSkipFrames mirrors the code in github.com/pkg/errors,
+// but makes the skip depth customizable, and skips any
+// redundant program counter frames
+func CallersWithSkipFrames(skip int, skipFrames map[uintptr]struct{}) (bool, *Stack) {
+	hasSkippedFrames := false
+	pcs := captureStacktrace(skip)
+	var newPCs []uintptr
+	for i := 0; i < len(pcs); i++ {
+		_, ok := skipFrames[pcs[i]]
+		if ok {
+			hasSkippedFrames = true
+		} else {
+			newPCs = append(newPCs, pcs[i])
+		}
+		// fmt.Println("i:", i, " ok:", ok, " pc:", pcs[i], " skipframes:", hasSkippedFrames)
+
+	}
+	var st Stack = newPCs
+	return hasSkippedFrames, &st
+}
+
+func captureStacktrace(skip int) []uintptr {
+	// Unlike other "skip"-based APIs, skip=0 identifies runtime.Callers
+	// itself. +2 to skip captureStacktrace and runtime.Callers.
+	selfSkip := 2
+	var numFrames = 64
+	pcs := make([]uintptr, numFrames)
+	numFrames = runtime.Callers(skip+selfSkip, pcs)
+	// runtime.Callers truncates the recorded stacktrace if there is no
+	// room in the provided slice. For the full wrapper trace, keep expanding
+	// storage until there are fewer frames than there is room.
+	for numFrames == len(pcs) {
+		pcs = make([]uintptr, len(pcs)*2)
+		numFrames = runtime.Callers(skip+selfSkip, pcs)
+	}
+	pcs = pcs[:numFrames]
+
+	var newPCs []uintptr
+	for i := range pcs[0:numFrames] {
+		newPCs = append(newPCs, pcs[i])
+		// fmt.Println("callers i:", i, " u:", pcs[i])
+	}
+	return newPCs
 }
 
 // Stack represents a Stack of program counters. This mirrors the
@@ -40,7 +82,7 @@ func (s *Stack) StackTrace() *StackTrace {
 // StackTrace is Stack of Frames from innermost (newest) to outermost (oldest).
 type StackTrace runtime.Frames
 
-// Next returns the next frame in the stack trace,
+// Next returns the next frame in the wrapper trace,
 // and a boolean indicating whether there are more after it.
 func (st *StackTrace) Next() (_ runtime.Frame, more bool) {
 	return (*runtime.Frames)(st).Next()
@@ -55,7 +97,7 @@ func (st *StackTrace) String() string {
 	return buffer.String()
 }
 
-// stackFormatter formats a stack trace into a readable string representation.
+// stackFormatter formats a wrapper trace into a readable string representation.
 type stackTraceFormatter struct {
 	b        *bytes.Buffer
 	nonEmpty bool // whether we've written at least one frame already
@@ -91,4 +133,33 @@ func (sf *stackTraceFormatter) FormatFrame(frame runtime.Frame) {
 	sf.b.WriteString(frame.File)
 	sf.b.WriteRune(':')
 	sf.b.WriteString(strconv.Itoa(frame.Line))
+}
+
+// ElideSharedStackSuffix removes the suffix of newStack that's already
+// present in prevStack. The function returns true if some entries
+// were elided.
+// type StackTrace []Frame -> type StackTrace runtime.Frames
+// callers []uintptr
+func ElideSharedStackSuffix(prevStack, newStack Stack) (Stack, bool) {
+
+	if len(prevStack) == 0 {
+		return newStack, false
+	}
+	if len(newStack) == 0 {
+		return newStack, false
+	}
+
+	// Skip over the common suffix.
+	var i, j int
+	for i, j = len(newStack)-1, len(prevStack)-1; i > 0 && j > 0; i, j = i-1, j-1 {
+		if newStack[i] != prevStack[j] {
+			break
+		}
+	}
+	if i == 0 {
+		// Keep at least one entry.
+		i = 1
+	}
+
+	return newStack[:i], i < len(newStack)-1
 }
