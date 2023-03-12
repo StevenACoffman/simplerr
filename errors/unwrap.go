@@ -14,11 +14,19 @@ package errors
 // github.com/pkg/errors) and `Wrapper` (`Unwrap()` method, from the
 // Go 2 error proposal).
 func UnwrapOnce(err error) (cause error) {
+	if err == nil {
+		return nil
+	}
 	switch e := err.(type) {
 	case interface{ Cause() error }:
 		return e.Cause()
 	case interface{ Unwrap() error }:
 		return e.Unwrap()
+	case interface{ Unwrap() []error }:
+		errs := e.Unwrap()
+		if len(errs) > 0 {
+			return errs[0]
+		}
 	}
 
 	return nil
