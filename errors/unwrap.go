@@ -19,6 +19,11 @@ func UnwrapOnce(err error) (cause error) {
 		return e.Cause()
 	case interface{ Unwrap() error }:
 		return e.Unwrap()
+	case interface{ Unwrap() []error }:
+		errs := e.Unwrap()
+		if len(errs) > 0 {
+			return errs[0]
+		}
 	}
 
 	return nil
