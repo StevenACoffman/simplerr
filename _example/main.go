@@ -27,10 +27,23 @@ func bar() error {
 	return errors.WithStack(withErr)
 }
 
+func baz() error {
+	withErr := errors.With(foo(), errors.New("Yet another bad thing happened"))
+	return errors.WithStack(withErr)
+}
+
 func main() {
 	myErr := bar()
 	fmt.Println("Doing something")
 	err := errors.WithStack(myErr)
-	fmt.Println("----")
+
+	myOtherErr := errors.WithStack(baz())
+
+	joinErr := errors.Join(err, myOtherErr)
+	fmt.Println("\n\n---withStackBar")
 	fmt.Printf("%+v\n", err)
+	fmt.Println("\n\n---baz")
+	fmt.Printf("%+v\n", myOtherErr)
+	fmt.Println("\n\n---joinErr")
+	fmt.Printf("%+v\n", joinErr)
 }

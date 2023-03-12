@@ -24,7 +24,7 @@ func With(back, front error) error {
 		return back
 	}
 
-	return wrapper{front: front, back: back}
+	return &wrapper{front: front, back: back}
 }
 
 // wrapper represents a wrapped stack of errors.
@@ -35,7 +35,7 @@ type wrapper struct {
 
 // Is implements the interface needed for errors.Is. It checks s.front first, and
 // then s.back.
-func (s wrapper) Is(target error) bool {
+func (s *wrapper) Is(target error) bool {
 	// This code copied exactly from errors.Is, minus the code to unwrap if the
 	// check fails. Thus, it is effectively like calling errors.Is(s.front,
 	// target).
@@ -55,12 +55,21 @@ func (s wrapper) Is(target error) bool {
 		return true
 	}
 
+	if x, ok := s.back.(interface{ Is(error) bool }); ok && x.Is(target) {
+		return true
+	}
+	for inner := s.Unwrap(); inner != nil; inner = UnwrapOnce(inner) {
+		if errors.Is(inner, target) {
+			return true
+		}
+	}
+
 	return false
 }
 
 // As implements the interface needed for errors.As. It checks s.front first, and
 // then s.back.
-func (s wrapper) As(target interface{}) bool {
+func (s *wrapper) As(target interface{}) bool {
 	// This code copied exactly from errors.As, minus the code to unwrap if the
 	// check fails. Thus, it is effectively like calling errors.As(s.front,
 	// target).
@@ -87,16 +96,22 @@ func (s wrapper) As(target interface{}) bool {
 	if x, ok := s.front.(interface{ As(interface{}) bool }); ok && x.As(target) {
 		return true
 	}
+	for inner := s.Unwrap(); inner != nil; inner = UnwrapOnce(inner) {
+		if errors.As(inner, target) {
+			return true
+		}
+	}
+
 	return false
 }
 
 // Unwrap iteratively unwraps the error wrapper in front until it runs, out of
 // wrapped errors, and then returns the back error.
-func (s wrapper) Unwrap() error {
+func (s *wrapper) Unwrap() error {
 	if err := errors.Unwrap(s.front); err != nil {
 		// return a new wrapper with the unwrapped err as front, so that we
 		// support unwrapping all of front and then moving on to back.
-		return wrapper{front: err, back: s.back}
+		return &wrapper{front: err, back: s.back}
 	}
 	// Otherwise we ran out of errors in front to unwrap, so return the
 	// underlying error.
@@ -105,7 +120,7 @@ func (s wrapper) Unwrap() error {
 
 // Error returns the two concatenated error strings, separated by a colon if
 // they are both non-empty.
-func (s wrapper) Error() string {
+func (s *wrapper) Error() string {
 	front := s.front.Error()
 	back := s.back.Error()
 	if front == "" {
