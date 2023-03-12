@@ -33,7 +33,7 @@ func Unwrap(err error) error { return UnwrapOnce(err) }
 // As finds the first error in err's chain that matches the type to which
 // target points, and if so, sets the target to its value and returns true.
 // An error matches a type if it is assignable to the target type, or if it
-// has a method As(interface{}) bool such that As(target) returns true. As
+// has a method As(any) bool such that As(target) returns true. As
 // will panic if target is not a non-nil pointer to a type which implements
 // error or is of interface type.
 //
@@ -47,7 +47,7 @@ func Unwrap(err error) error { return UnwrapOnce(err) }
 // As finds the first error in err's chain that matches the type to which
 // target points, and if so, sets the target to its value and returns true.
 // An error matches a type if it is assignable to the target type, or if it
-// has a method As(interface{}) bool such that As(target) returns true. As
+// has a method As(any) bool such that As(target) returns true. As
 // will panic if target is not a non-nil pointer to a type which implements
 // error or is of interface type.
 //
@@ -57,7 +57,7 @@ func Unwrap(err error) error { return UnwrapOnce(err) }
 // Note: this implementation differs from that of xerrors as follows:
 // - it also supports recursing through causes with Cause().
 // - if it detects an API use error, its panic object is a valid error.
-func As(err error, target interface{}) bool {
+func As(err error, target any) bool {
 	if target == nil {
 		panic(fmt.Errorf("errors.As: target cannot be nil"))
 	}
@@ -80,7 +80,7 @@ func As(err error, target interface{}) bool {
 
 			return true
 		}
-		if x, ok := c.(interface{ As(interface{}) bool }); ok && x.As(target) {
+		if x, ok := c.(interface{ As(any) bool }); ok && x.As(target) {
 			return true
 		}
 	}
@@ -152,7 +152,7 @@ func Is(err, reference error) bool {
 }
 
 // This is only extracted to make the linters not suggest fixing it
-func equal(err, reference interface{}) bool {
+func equal(err, reference any) bool {
 	return err == reference
 }
 

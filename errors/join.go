@@ -2,6 +2,7 @@ package errors
 
 import (
 	"fmt"
+	"strings"
 )
 
 // Join returns an error that wraps the given errors.
@@ -55,7 +56,9 @@ func (e *joinError) Format(w fmt.State, verb rune) {
 		if i > 0 {
 			fmt.Fprint(w, "\n")
 		}
-		fmt.Fprintf(w, "[%d]:\n", i)
-		fmt.Fprintf(w, fmt.FormatString(w, verb), err)
+		fmt.Fprintf(w, "[%d]: %s\n  ", i, err.Error())
+		s := fmt.Sprintf(fmt.FormatString(w, verb), err)
+		s = strings.Join(strings.Split(s, "\n"), "\n  ")
+		fmt.Fprint(w, s)
 	}
 }
