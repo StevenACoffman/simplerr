@@ -57,6 +57,12 @@ func (s *Stack) StackTrace() *StackTrace {
 	return (*StackTrace)(runtime.CallersFrames(pcs))
 }
 
+// StackTraceProvider is a provider of StackTraces.
+// This is, intentionally, defined to be implemented by pkg/errors.stack.
+type StackTraceProvider interface {
+	StackTrace() StackTrace
+}
+
 // StackTrace is Stack of Frames from innermost (newest) to outermost (oldest).
 type StackTrace runtime.Frames
 
