@@ -116,14 +116,15 @@ func (w *withFields) getFields() Fields {
 	return result
 }
 
-// GetFields retrieves the Fields from a stack of causes.
+// GetFields retrieves the Fields from a stack of causes,
+// combines them such that only the last key value pair wins.
 func GetFields(err error) Fields {
 	var tmpErr withFields
 	if As(err, &tmpErr) {
 		return tmpErr.getFields()
 	}
-
-	return nil
+	// TODO(steve): Hmm... nil? Not sure which is preferable
+	return Fields{}
 }
 
 func (w *withFields) formatFields() string {

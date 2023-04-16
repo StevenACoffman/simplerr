@@ -28,8 +28,6 @@ func bar() error {
 }
 
 func main() {
-	i := errors.Internal("message", "somemessage")
-	fmt.Printf("%+v\n\n", i)
 
 	fieldday := errors.WrapWithFields(
 		errors.New("fieldday"),
