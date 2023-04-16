@@ -96,10 +96,31 @@ func (w *withFields) formatEntries(st fmt.State) {
 	}
 }
 
+func (w *withFields) getFields() Fields {
+	result := Fields{}
+
+	// getEntries returns prepended last error in, first out
+	entries := getEntries(w)
+
+	for _, err := range entries {
+		var tmpErr withFields
+		if As(err, &tmpErr) {
+			for k, v := range tmpErr.fields {
+				result[k] = v
+			}
+		}
+	}
+	for k, v := range w.fields {
+		result[k] = v
+	}
+	return result
+}
+
 // GetFields retrieves the Fields from a stack of causes.
 func GetFields(err error) Fields {
-	if w, ok := err.(*withFields); ok {
-		return w.fields
+	var tmpErr withFields
+	if As(err, &tmpErr) {
+		return tmpErr.getFields()
 	}
 
 	return nil

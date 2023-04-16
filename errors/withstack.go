@@ -103,6 +103,7 @@ func getLastStack(err error) *Stack {
 	return nil
 }
 
+// getEntries prepended last error in, first out
 func getEntries(err error) []error {
 	var entries []error
 	for err != nil {
