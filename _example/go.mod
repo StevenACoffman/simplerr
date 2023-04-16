@@ -1,6 +1,6 @@
 module github.com/StevenACoffman/simplerr/_example
 
-go 1.16
+go 1.18
 
 replace github.com/StevenACoffman/simplerr => ../
 

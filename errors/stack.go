@@ -19,7 +19,7 @@ func captureStacktrace(skip int) []uintptr {
 	// Unlike other "skip"-based APIs, skip=0 identifies runtime.Callers
 	// itself. +2 to skip captureStacktrace and runtime.Callers.
 	selfSkip := 2
-	var numFrames = 64
+	numFrames := 64
 	pcs := make([]uintptr, numFrames)
 	numFrames = runtime.Callers(skip+selfSkip, pcs)
 	// runtime.Callers will truncate the recorded stacktrace if there is no
@@ -144,5 +144,5 @@ func ElideSharedStackSuffix(prevStack, newStack *Stack) (*Stack, bool) {
 		i = 1
 	}
 	elidedStack := newSt[:i]
-	return &(elidedStack), i < len((newSt))-1
+	return &(elidedStack), i < len(newSt)-1
 }

@@ -70,7 +70,9 @@ func As(err error, target interface{}) bool {
 		panic(fmt.Errorf("errors.As: target must be a non-nil pointer, found %T", target))
 	}
 	if e := typ.Elem(); e.Kind() != reflectlite.Interface && !e.Implements(errorType) {
-		panic(fmt.Errorf("errors.As: *target must be interface or implement error, found %T", target))
+		panic(
+			fmt.Errorf("errors.As: *target must be interface or implement error, found %T", target),
+		)
 	}
 
 	targetType := typ.Elem()

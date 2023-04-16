@@ -28,6 +28,14 @@ func bar() error {
 }
 
 func main() {
+	i := errors.Internal("message", "somemessage")
+	fmt.Printf("%+v\n\n", i)
+
+	fieldday := errors.WrapWithFields(
+		errors.New("fieldday"),
+		errors.Fields{"Mark": 10, "Sandy": 20},
+	)
+	fmt.Printf("%+v\n\n", fieldday)
 	myErr := bar()
 	fmt.Println("Doing something")
 	err := errors.WithStack(myErr)

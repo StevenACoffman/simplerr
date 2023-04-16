@@ -133,7 +133,7 @@ func printEntry(st fmt.State, entry error) {
 				"\n", string(detailSep)))
 		}
 		if w.hasSkippedFrames {
-			fmt.Fprintf(st, "%s[...repeated from below...]", detailSep)
+			_, _ = fmt.Fprintf(st, "%s[...repeated from below...]", detailSep)
 		}
 	}
 }
