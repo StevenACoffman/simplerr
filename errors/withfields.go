@@ -3,6 +3,7 @@ package errors
 import (
 	"fmt"
 	"io"
+	reflectlite "reflect"
 	"sort"
 	"strings"
 )
@@ -15,7 +16,7 @@ type withFields struct {
 	hasSkippedFrames bool
 }
 
-type Fields map[string]interface{}
+type Fields map[string]any
 
 // WrapWithFields adds fields to an existing error.
 func WrapWithFields(err error, fields Fields) error {
@@ -38,20 +39,28 @@ func WrapWithFieldsAndDepth(err error, fields Fields, depth int) error {
 	return &withFields{cause: err, hasSkippedFrames: hasSkippedFrames, Stack: st, fields: fields}
 }
 
+// compiler enforced interface conformance checks
 var (
 	_ error         = (*withFields)(nil)
 	_ fmt.Formatter = (*withFields)(nil)
+	_ Iser          = (*withFields)(nil)
+	_ Aser          = (*withFields)(nil)
+	_ Unwrapper     = (*withFields)(nil)
 )
 
-// it's an error.
-func (w *withFields) Error() string { return w.formatFields() + " " + w.cause.Error() }
+// Error conforms to the error interface by returning a string representation
+// The returned value is top level error's fields concatenated with cause.Error()
+func (w *withFields) Error() string { return w.formatFields() + w.cause.Error() }
+
+// Unwrap returns the underlying cause
+func (w *withFields) Unwrap() error { return w.cause }
+func (w *withFields) Cause() error  { return w.cause }
 
 // Format implements the fmt.Formatter interface.
 func (w *withFields) Format(st fmt.State, _ rune) {
-	s := w.formatFields()
-	// TODO(steve): this is maybe wrong?
+	s := w.formatAllFields()
 	_, _ = fmt.Fprint(st, s)
-	_, _ = fmt.Fprint(st, "cause: ", w.cause.Error(), "\n")
+	_, _ = fmt.Fprint(st, "cause:", w.cause.Error(), "\nWraps: ")
 
 	w.formatEntries(st)
 	stackTraceString := w.StackTrace().String()
@@ -96,14 +105,14 @@ func (w *withFields) formatEntries(st fmt.State) {
 	}
 }
 
+// getFields returns the fields of this error and any wrapped error
+// for key collisions, the outermost error's field wins
 func (w *withFields) getFields() Fields {
 	result := Fields{}
-
 	// getEntries returns prepended last error in, first out
 	entries := getEntries(w)
-
 	for _, err := range entries {
-		var tmpErr withFields
+		var tmpErr *withFields
 		if As(err, &tmpErr) {
 			for k, v := range tmpErr.fields {
 				result[k] = v
@@ -116,10 +125,10 @@ func (w *withFields) getFields() Fields {
 	return result
 }
 
-// GetFields retrieves the Fields from a stack of causes,
-// combines them such that only the last key value pair wins.
+// GetFields retrieves any Fields from a stack of causes,
+// combines them such that the last key value pair wins.
 func GetFields(err error) Fields {
-	var tmpErr withFields
+	var tmpErr *withFields
 	if As(err, &tmpErr) {
 		return tmpErr.getFields()
 	}
@@ -128,34 +137,99 @@ func GetFields(err error) Fields {
 }
 
 func (w *withFields) formatFields() string {
-	var sb strings.Builder
-	if w.fields != nil && len(w.fields) != 0 {
-		var empty string
-		_, _ = sb.WriteString("fields: [")
+	return formatFields(w.fields)
+}
 
-		keys := make([]string, 0, len(w.fields))
-		for k := range w.fields {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for i, k := range keys {
-			v := w.fields[k]
-			eq := empty
-			var val interface{} = empty
-			if i > 0 {
-				_, _ = sb.WriteString(",")
-			}
-			if v != nil {
-				if len(k) > 1 {
-					eq = ":"
-				}
-				val = v
-			}
-
-			_, _ = sb.WriteString(fmt.Sprintf("%s%s%v", k, eq, val))
-		}
-
-		_, _ = sb.WriteString("], ")
+func formatFields(fields Fields) string {
+	if len(fields) == 0 {
+		return ""
 	}
+	var sb strings.Builder
+	var empty string
+	_, _ = sb.WriteString("fields:[")
+
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i, k := range keys {
+		v := fields[k]
+		eq := empty
+		var val any = empty
+		if i > 0 {
+			_, _ = sb.WriteString(",")
+		}
+		if v != nil {
+			eq = ":"
+			val = v
+		}
+
+		_, _ = sb.WriteString(fmt.Sprintf("%s%s%v", k, eq, val))
+	}
+
+	_, _ = sb.WriteString("],")
+
 	return sb.String()
+}
+
+func (w *withFields) formatAllFields() string {
+	return formatFields(w.getFields())
+}
+
+// Is implements the interface needed for errors.Is. It checks s.front first, and
+// then s.back.
+func (w *withFields) Is(target error) bool {
+	// This code copied exactly from errors.Is, minus the code to unwrap if the
+	// check fails. Thus, it is effectively like calling errors.Is(w.front,
+	// target).
+	//
+	// Note, if w.front doesn't match the target, errors.Is will call this
+	// type'w Unwrap, which will iterate through the wrapped errors.
+
+	if target == nil {
+		return false
+	}
+
+	isComparable := reflectlite.TypeOf(target).Comparable()
+	if isComparable && w.cause == target {
+		return true
+	}
+	if x, ok := w.cause.(interface{ Is(error) bool }); ok && x.Is(target) {
+		return true
+	}
+
+	return false
+}
+
+// As implements the interface needed for errors.As. It checks s.front first, and
+// then s.back.
+func (w *withFields) As(target any) bool {
+	// This code copied exactly from errors.As, minus the code to unwrap if the
+	// check fails. Thus, it is effectively like calling errors.As(w.front,
+	// target).
+	//
+	// Note, if w.front doesn't match the target, errors.As will call this types
+	// Unwrap, which will iterate through the wrapped errors.
+
+	if target == nil {
+		panic("errors: target cannot be nil")
+	}
+	val := reflectlite.ValueOf(target)
+	typ := val.Type()
+	if typ.Kind() != reflectlite.Ptr || val.IsNil() {
+		panic("errors: target must be a non-nil pointer")
+	}
+	targetType := typ.Elem()
+	if targetType.Kind() != reflectlite.Interface && !targetType.Implements(errorType) {
+		panic("errors: *target must be interface or implement error")
+	}
+	if reflectlite.TypeOf(w.cause).AssignableTo(targetType) {
+		val.Elem().Set(reflectlite.ValueOf(w.cause))
+		return true
+	}
+	if x, ok := w.cause.(interface{ As(any) bool }); ok && x.As(target) {
+		return true
+	}
+	return false
 }

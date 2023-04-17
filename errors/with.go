@@ -33,6 +33,14 @@ type wrapper struct {
 	back  error
 }
 
+// compiler enforced interface conformance checks
+var (
+	_ error     = (*wrapper)(nil)
+	_ Iser      = (*wrapper)(nil)
+	_ Aser      = (*wrapper)(nil)
+	_ Unwrapper = (*wrapper)(nil)
+)
+
 // Is implements the interface needed for errors.Is. It checks s.front first, and
 // then s.back.
 func (s *wrapper) Is(target error) bool {
@@ -60,7 +68,7 @@ func (s *wrapper) Is(target error) bool {
 
 // As implements the interface needed for errors.As. It checks s.front first, and
 // then s.back.
-func (s *wrapper) As(target interface{}) bool {
+func (s *wrapper) As(target any) bool {
 	// This code copied exactly from errors.As, minus the code to unwrap if the
 	// check fails. Thus, it is effectively like calling errors.As(s.front,
 	// target).
@@ -84,7 +92,7 @@ func (s *wrapper) As(target interface{}) bool {
 		val.Elem().Set(reflectlite.ValueOf(s.front))
 		return true
 	}
-	if x, ok := s.front.(interface{ As(interface{}) bool }); ok && x.As(target) {
+	if x, ok := s.front.(interface{ As(any) bool }); ok && x.As(target) {
 		return true
 	}
 	return false

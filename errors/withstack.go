@@ -3,6 +3,7 @@ package errors
 import (
 	"fmt"
 	"io"
+	reflectlite "reflect"
 	"strings"
 )
 
@@ -38,9 +39,13 @@ type withStack struct {
 	hasSkippedFrames bool
 }
 
+// compiler enforced interface conformance checks
 var (
 	_ error         = (*withStack)(nil)
 	_ fmt.Formatter = (*withStack)(nil)
+	_ Iser          = (*withStack)(nil)
+	_ Aser          = (*withStack)(nil)
+	_ Unwrapper     = (*withStack)(nil)
 )
 
 func (w *withStack) Error() string { return w.cause.Error() }
@@ -57,6 +62,63 @@ func (w *withStack) Format(st fmt.State, _ rune) {
 			fmt.Sprintf("%+v", stackTraceString),
 			"\n", string(detailSep)))
 	}
+}
+
+// Is implements the interface needed for errors.Is. It checks s.front first, and
+// then s.back.
+func (w *withStack) Is(target error) bool {
+	// This code copied exactly from errors.Is, minus the code to unwrap if the
+	// check fails. Thus, it is effectively like calling errors.Is(w.front,
+	// target).
+	//
+	// Note, if w.front doesn't match the target, errors.Is will call this
+	// type'w Unwrap, which will iterate through the wrapped errors.
+
+	if target == nil {
+		return false
+	}
+
+	isComparable := reflectlite.TypeOf(target).Comparable()
+	if isComparable && w.cause == target {
+		return true
+	}
+	if x, ok := w.cause.(interface{ Is(error) bool }); ok && x.Is(target) {
+		return true
+	}
+
+	return false
+}
+
+// As implements the interface needed for errors.As. It checks s.front first, and
+// then s.back.
+func (w *withStack) As(target interface{}) bool {
+	// This code copied exactly from errors.As, minus the code to unwrap if the
+	// check fails. Thus, it is effectively like calling errors.As(w.front,
+	// target).
+	//
+	// Note, if w.front doesn't match the target, errors.As will call this types
+	// Unwrap, which will iterate through the wrapped errors.
+
+	if target == nil {
+		panic("errors: target cannot be nil")
+	}
+	val := reflectlite.ValueOf(target)
+	typ := val.Type()
+	if typ.Kind() != reflectlite.Ptr || val.IsNil() {
+		panic("errors: target must be a non-nil pointer")
+	}
+	targetType := typ.Elem()
+	if targetType.Kind() != reflectlite.Interface && !targetType.Implements(errorType) {
+		panic("errors: *target must be interface or implement error")
+	}
+	if reflectlite.TypeOf(w.cause).AssignableTo(targetType) {
+		val.Elem().Set(reflectlite.ValueOf(w.cause))
+		return true
+	}
+	if x, ok := w.cause.(interface{ As(interface{}) bool }); ok && x.As(target) {
+		return true
+	}
+	return false
 }
 
 // formatEntries reads the entries from s.entries and produces a

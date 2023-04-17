@@ -1,5 +1,3 @@
-// You can edit this code!
-// Click here and start typing.
 package main
 
 import (
@@ -28,7 +26,6 @@ func bar() error {
 }
 
 func main() {
-
 	fieldday := errors.WrapWithFields(
 		errors.New("fieldday"),
 		errors.Fields{"Mark": 10, "Sandy": 20},

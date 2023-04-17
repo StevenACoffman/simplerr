@@ -31,7 +31,7 @@ func captureStacktrace(skip int) []uintptr {
 	}
 	pcs = pcs[:numFrames]
 
-	var newPCs []uintptr
+	newPCs := make([]uintptr, numFrames)
 	for i := range pcs[0:numFrames] {
 		newPCs = append(newPCs, pcs[i])
 	}
@@ -42,10 +42,15 @@ func captureStacktrace(skip int) []uintptr {
 // (non-exported) type of the same name in github.com/pkg/errors.
 type Stack []uintptr
 
+// compiler enforced interface compliance test
+var (
+	_ fmt.Formatter = (*withFields)(nil)
+)
+
 // Format mirrors the code in github.com/pkg/errors.
+// https://github.com/pkg/errors/blob/master/stack.go#L142
 func (s *Stack) Format(st fmt.State, verb rune) {
-	switch verb {
-	case 'v':
+	if verb == 'v' {
 		_, _ = fmt.Fprintf(st, "\n%+v", s.StackTrace().String())
 	}
 }
@@ -102,14 +107,14 @@ var detailSep = []byte("\n  | ")
 // FormatFrame formats the given frame.
 func (sf *stackTraceFormatter) FormatFrame(frame runtime.Frame) {
 	if sf.nonEmpty {
-		sf.b.WriteRune('\n')
+		sf.b.WriteByte('\n')
 	}
 	sf.nonEmpty = true
 	sf.b.WriteString(frame.Function)
-	sf.b.WriteRune('\n')
-	sf.b.WriteRune('\t')
+	sf.b.WriteByte('\n')
+	sf.b.WriteByte('\t')
 	sf.b.WriteString(frame.File)
-	sf.b.WriteRune(':')
+	sf.b.WriteByte(':')
 	sf.b.WriteString(strconv.Itoa(frame.Line))
 }
 
