@@ -85,12 +85,12 @@ func TestWithFieldsErrAllList(t *testing.T) {
 	actual := fmt.Sprintf("%+v", three)
 	expected := `fields:[b:true,c:true,msg:three],cause:fields:[b:true,msg:two],one
 Wraps: (1) fields:[b:true,msg:two],one
-Wraps: (2) one
-Error types: (1) *errors.withFields (2) *errors.errorString
   -- Stack trace:github.com/StevenACoffman/simplerr/errors_test.TestWithFieldsErrAllList
-  | 	github.com/StevenACoffman/simplerr/errors/withfields_test.go:84
+  | 	github.com/StevenACoffman/simplerr/errors/withfields_test.go:83
   | testing.tRunner
-  | 	testing/testing.go:1576`
+  | 	testing/testing.go:1576
+Wraps: (2) one
+Error types: (1) *errors.withFields (2) *errors.errorString`
 	if actual != expected {
 		t.Fatalf("expected:\n %v\nbut got:\n%v", expected, actual)
 	}

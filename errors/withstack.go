@@ -55,13 +55,7 @@ func (w *withStack) Unwrap() error { return w.cause }
 // Format implements the fmt.Formatter interface.
 func (w *withStack) Format(st fmt.State, _ rune) {
 	w.formatEntries(st)
-	stackTraceString := w.StackTrace().String()
-	if stackTraceString != "" {
-		_, _ = io.WriteString(st, "\n  -- Stack trace:")
-		_, _ = io.WriteString(st, strings.ReplaceAll(
-			fmt.Sprintf("%+v", stackTraceString),
-			"\n", string(detailSep)))
-	}
+	outputStackTrace(st, false, w.StackTrace().String())
 }
 
 // Is implements the interface needed for errors.Is. It checks s.front first, and
@@ -159,6 +153,9 @@ func getLastStack(err error) *Stack {
 		if ws, ok := err.(*withStack); ok {
 			return ws.Stack
 		}
+		if wf, ok := err.(*withFields); ok {
+			return wf.Stack
+		}
 		err = UnwrapOnce(err)
 	}
 
@@ -188,15 +185,21 @@ func printEntry(st fmt.State, entry error) {
 		}
 	}
 	if w, ok := entry.(*withStack); ok {
-		stackTraceString := w.StackTrace().String()
-		if w.hasSkippedFrames || strings.TrimSpace(stackTraceString) != "" {
-			_, _ = io.WriteString(st, "\n  -- Stack trace:")
-			_, _ = io.WriteString(st, strings.ReplaceAll(
-				fmt.Sprintf("%+v", stackTraceString),
-				"\n", string(detailSep)))
-		}
-		if w.hasSkippedFrames {
-			_, _ = fmt.Fprintf(st, "%s[...repeated from below...]", detailSep)
-		}
+		outputStackTrace(st, w.hasSkippedFrames, w.StackTrace().String())
+	}
+	if w, ok := entry.(*withFields); ok {
+		outputStackTrace(st, w.hasSkippedFrames, w.StackTrace().String())
+	}
+}
+
+func outputStackTrace(st fmt.State, hasSkippedFrames bool, stackTraceString string) {
+	if hasSkippedFrames || strings.TrimSpace(stackTraceString) != "" {
+		_, _ = io.WriteString(st, "\n  -- Stack trace:")
+		_, _ = io.WriteString(st, strings.ReplaceAll(
+			fmt.Sprintf("%+v", stackTraceString),
+			"\n", string(detailSep)))
+	}
+	if hasSkippedFrames {
+		_, _ = fmt.Fprintf(st, "%s[...repeated from below...]", detailSep)
 	}
 }
