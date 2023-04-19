@@ -50,7 +50,7 @@ var (
 
 // Error conforms to the error interface by returning a string representation
 // The returned value is top level error's fields concatenated with cause.Error()
-func (w *withFields) Error() string { return w.formatFields() + w.cause.Error() }
+func (w *withFields) Error() string { return w.formatAllFields() + " Cause: " + w.cause.Error() }
 
 // Unwrap returns the underlying cause
 func (w *withFields) Unwrap() error { return w.cause }
@@ -58,10 +58,6 @@ func (w *withFields) Cause() error  { return w.cause }
 
 // Format implements the fmt.Formatter interface.
 func (w *withFields) Format(st fmt.State, _ rune) {
-	s := w.formatAllFields()
-	_, _ = fmt.Fprint(st, s)
-	_, _ = fmt.Fprint(st, "cause:", w.cause.Error(), "\nWraps: ")
-
 	w.formatEntries(st)
 	stackTraceString := w.StackTrace().String()
 	if stackTraceString != "" {
@@ -75,7 +71,7 @@ func (w *withFields) Format(st fmt.State, _ rune) {
 // formatEntries reads the entries from s.entries and produces a
 // detailed rendering in s.finalBuf.
 func (w *withFields) formatEntries(st fmt.State) {
-	entries := getEntries(w.cause)
+	entries := getEntries(w)
 	if len(entries) == 0 {
 		return
 	}
@@ -146,7 +142,7 @@ func formatFields(fields Fields) string {
 	}
 	var sb strings.Builder
 	var empty string
-	_, _ = sb.WriteString("fields:[")
+	_, _ = sb.WriteString("Fields: [")
 
 	keys := make([]string, 0, len(fields))
 	for k := range fields {
